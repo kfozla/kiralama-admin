@@ -13,10 +13,12 @@ const nextConfig = {
   },
 
   async rewrites() {
+    const apiUrl = "https://api.goksoft.com";
+
     return [
       {
         source: "/api/:path*",
-        destination: "https://api.goksoft.com/api/:path*",
+        destination: `${apiUrl}/api/:path*`,
       },
     ];
   },

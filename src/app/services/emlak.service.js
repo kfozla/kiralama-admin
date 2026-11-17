@@ -91,3 +91,38 @@ export async function updateEmlakYayinDurumu(id, yayinda) {
 
   return data;
 }
+
+export async function advancedSearch(filters = {}) {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === "") {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => params.append(key, item));
+    } else {
+      params.append(key, value);
+    }
+  });
+
+  const response = await apiClient.get(
+    `/Emlak/advanced-search?${params.toString()}`,
+  );
+
+  return response.data;
+}
+
+export async function createEmlakPaylasim(payload) {
+  const { data } = await apiClient.post("/EmlakPaylasim", payload);
+  return data;
+}
+
+export async function getPublicEmlakPaylasim(token) {
+  const { data } = await apiClient.get(
+    `/EmlakPaylasim/public/${encodeURIComponent(token)}`,
+  );
+
+  return data;
+}

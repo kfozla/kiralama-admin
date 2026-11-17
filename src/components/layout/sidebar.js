@@ -20,6 +20,7 @@ import {
   ScrollText,
   ShieldCheck,
   CalendarPlus,
+  Search,
 } from "lucide-react";
 
 const mainMenu = [
@@ -30,6 +31,11 @@ const mainMenu = [
   },
 ];
 const emlakMenu = [
+  {
+    label: "Emlak Ara",
+    href: "/emlak-ara",
+    icon: Search,
+  },
   {
     label: "Emlak Listesi",
     href: "/emlaklar",
