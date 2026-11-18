@@ -20,6 +20,7 @@ import {
   MapPin,
   ChevronDown,
   ChevronRight,
+  ChevronsRight,
   X,
   Waves,
   ListChecks,
