@@ -63,11 +63,11 @@ const createInitialFilters = () => ({
 });
 
 const HAVUZ_KORUNAK_TIPLERI = [
-  { value: "0", label: "Korunaklı" },
+  { value: "2", label: "Korunaklı" },
 
   { value: "1", label: "Yarı Korunaklı" },
 
-  { value: "2", label: "Korunaksız" },
+  { value: "0", label: "Korunaksız" },
 ];
 
 const inputClass =
