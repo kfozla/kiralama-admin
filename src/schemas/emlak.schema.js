@@ -68,6 +68,13 @@ export const emlakSchema = z
       .max(100, "Belge numarası en fazla 100 karakter olabilir.")
       .optional()
       .nullable(),
+
+    komisyonOrani: z
+      .number({
+        error: "Komisyon oranı gereklidir.",
+      })
+      .min(0, "Komisyon oranı negatif olamaz.")
+      .max(100, "Komisyon oranı 100'den büyük olamaz."),
   })
   .superRefine((data, ctx) => {
     for (const id of data.oneCikanOzellikIds) {

@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import Link from "next/link";
+
 import {
   AlertCircle,
   Bath,
@@ -9,15 +11,18 @@ import {
   Check,
   CheckSquare2,
   ChevronLeft,
-  ChevronRight,
   ChevronsLeft,
-  ChevronsRight,
   Copy,
   ExternalLink,
   House,
   Link2,
   Loader2,
   MapPin,
+  ChevronDown,
+  ChevronRight,
+  X,
+  Waves,
+  ListChecks,
   RefreshCw,
   RotateCcw,
   Search,
@@ -26,53 +31,66 @@ import {
 } from "lucide-react";
 
 import { EMLAK_TIPLERI } from "@/constants/emlak";
+
 import { getBolgeler } from "@/app/services/bolge.service";
+
 import { getEmlakOzellikler } from "@/app/services/emlakOzellik.service";
+
 import {
   advancedSearch,
   createEmlakPaylasim,
 } from "@/app/services/emlak.service";
 
-// -------------------------------------------
-// Constants
-// -------------------------------------------
-
 const createInitialFilters = () => ({
   giris: "",
+
   cikis: "",
+
   bolgeId: "",
+
   emlakTipi: "",
+
   minKapasite: "",
+
   minYatakOdasi: "",
+
   minBanyo: "",
+
   ozellikIds: [],
+
   havuzKorunakTipi: "",
 });
 
 const HAVUZ_KORUNAK_TIPLERI = [
   { value: "0", label: "Korunaklı" },
+
   { value: "1", label: "Yarı Korunaklı" },
+
   { value: "2", label: "Korunaksız" },
 ];
 
 const inputClass =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10";
 
-// -------------------------------------------
-// Helpers
-// -------------------------------------------
-
 function normalizeEmlak(item) {
   return {
     ...item,
+
     id: Number(item.id),
+
     emlakAdi: item.emlakAdi ?? item.emlakAdı ?? "İsimsiz emlak",
+
     bolgeId: item.bolgeId ?? null,
+
     bolgeAdi: item.bolgeAdi ?? item.bolge?.ad ?? "",
+
     emlakTipiAdi:
       EMLAK_TIPLERI[item.emlakTipi] ?? String(item.emlakTipi ?? "-"),
+
     yatakOdasiSayisi: item.yatakOdasiSayisi ?? item.yatakOdasıSayısı ?? 0,
+
     banyoSayisi: item.banyoSayisi ?? item.banyoSayısı ?? 0,
+
     kapakFotografUrl: item.kapakFotografUrl ?? null,
   };
 }
@@ -80,39 +98,42 @@ function normalizeEmlak(item) {
 function getImageUrl(path) {
   if (!path) return null;
 
-  // Backend presigned S3 URL döndürüyor.
   if (/^https?:\/\//i.test(path)) return path;
 
-  // Bir object key döndüyse bunu yanlışlıkla
-  // public URL olarak kullanmayalım.
   return null;
 }
 
 function makeRegionOptions(regions) {
   const byParent = new Map();
+
   const allIds = new Set(regions.map((b) => Number(b.id)));
 
   regions.forEach((region) => {
     const parent = Number(region.parentBolgeId);
+
     const key =
       region.parentBolgeId == null || !allIds.has(parent) ? null : parent;
 
     if (!byParent.has(key)) byParent.set(key, []);
+
     byParent.get(key).push(region);
   });
 
   const result = [];
+
   const visited = new Set();
 
   const walk = (parent, depth) => {
     for (const region of byParent.get(parent) ?? []) {
       const id = Number(region.id);
+
       if (visited.has(id)) continue;
 
       visited.add(id);
 
       result.push({
         value: String(id),
+
         label: `${"— ".repeat(depth)}${region.ad}`,
       });
 
@@ -126,6 +147,7 @@ function makeRegionOptions(regions) {
     if (!visited.has(Number(region.id))) {
       result.push({
         value: String(region.id),
+
         label: region.ad,
       });
     }
@@ -139,12 +161,19 @@ function buildQuery(filters) {
 
   for (const key of [
     "giris",
+
     "cikis",
+
     "bolgeId",
+
     "emlakTipi",
+
     "minKapasite",
+
     "minYatakOdasi",
+
     "minBanyo",
+
     "havuzKorunakTipi",
   ]) {
     if (filters[key] !== "" && filters[key] != null) {
@@ -159,10 +188,6 @@ function buildQuery(filters) {
   return result;
 }
 
-// -------------------------------------------
-// Reusable input
-// -------------------------------------------
-
 function FilterField({ label, id, children }) {
   return (
     <div>
@@ -172,48 +197,448 @@ function FilterField({ label, id, children }) {
       >
         {label}
       </label>
+
       {children}
     </div>
   );
 }
 
-// -------------------------------------------
-// Page
-// -------------------------------------------
+// Arama ekranında backend tek bir bolgeId kabul ediyor.
+// Bu nedenle çoklu bölge yerine hiyerarşik, aramalı tek seçim kullanıyoruz.
+function createRegionRows(regions) {
+  const all = new Map();
+  for (const r of regions) {
+    const id = Number(r.id);
+    if (!Number.isInteger(id)) continue;
+    all.set(id, {
+      id,
+      name: r.ad ?? r.name ?? `Bölge #${id}`,
+      parentId: r.parentBolgeId == null ? null : Number(r.parentBolgeId),
+      children: [],
+    });
+  }
+  const roots = [];
+  for (const node of all.values()) {
+    const parent = all.get(node.parentId);
+    if (parent && parent.id !== node.id) parent.children.push(node);
+    else roots.push(node);
+  }
+  const sort = (nodes) => {
+    nodes.sort((a, b) => a.name.localeCompare(b.name, "tr"));
+    nodes.forEach((n) => sort(n.children));
+  };
+  // Bölge verisinde döngü olmaması bekleniyor.
+  sort(roots);
+  return roots;
+}
+
+function FilterDropdown({
+  title,
+  value,
+  placeholder,
+  options,
+  onChange,
+  icon: Icon = House,
+  searchable = false,
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    const escape = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const selected = options.find((o) => String(o.value) === String(value));
+  const filtered = options.filter(
+    (o) =>
+      !query ||
+      o.label
+        .toLocaleLowerCase("tr-TR")
+        .includes(query.toLocaleLowerCase("tr-TR")),
+  );
+  return (
+    <div ref={ref} className="relative min-w-0">
+      <p className="mb-2 text-xs font-semibold text-slate-600">{title}</p>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={`flex h-11 w-full items-center gap-2 rounded-xl border bg-white px-3 text-left text-sm transition hover:border-blue-400 ${value !== "" ? "border-blue-300 text-blue-700" : "border-slate-200 text-slate-700"}`}
+      >
+        <Icon size={16} className="shrink-0 text-slate-400" />
+        <span className="min-w-0 flex-1 truncate">
+          {selected?.label ?? placeholder}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-2 w-full min-w-[220px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+          {searchable && (
+            <div className="border-b border-slate-100 p-2">
+              <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-2">
+                <Search size={15} className="text-slate-400" />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Ara..."
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                />
+              </div>
+            </div>
+          )}
+          <div className="max-h-64 overflow-y-auto p-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+                setQuery("");
+              }}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-blue-50"
+            >
+              {placeholder}
+              {value === "" && <Check size={16} className="text-blue-600" />}
+            </button>
+            {filtered.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  onChange(String(option.value));
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-blue-50 ${String(option.value) === String(value) ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700"}`}
+              >
+                <span className="truncate">{option.label}</span>
+                {String(option.value) === String(value) && (
+                  <Check size={16} className="shrink-0 text-blue-600" />
+                )}
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="px-3 py-4 text-center text-xs text-slate-500">
+                Sonuç bulunamadı.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RegionDropdown({ regions, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState(() => new Set());
+  const ref = useRef(null);
+  const tree = useMemo(() => createRegionRows(regions), [regions]);
+  const selected = regions.find((r) => Number(r.id) === Number(value));
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    const escape = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const toggle = (id) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const term = query.trim().toLocaleLowerCase("tr-TR");
+  // Arama eşleşen alt bölgeleri de gösterecek, üst bölge bağlamını korur.
+  const renderNodes = (nodes, depth = 0) =>
+    nodes.map((node) => {
+      const containsMatch = (n) =>
+        n.name.toLocaleLowerCase("tr-TR").includes(term) ||
+        n.children.some(containsMatch);
+      if (term && !containsMatch(node)) return null;
+      const visibleChildren = term
+        ? node.children
+        : expanded.has(node.id)
+          ? node.children
+          : [];
+      const isSelected = String(value) === String(node.id);
+      return (
+        <div key={node.id}>
+          <div
+            className={`flex items-center rounded-lg hover:bg-blue-50 ${isSelected ? "bg-blue-50" : ""}`}
+            style={{ paddingLeft: `${6 + depth * 15}px` }}
+          >
+            {node.children.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => toggle(node.id)}
+                aria-label={`${node.name} alt bölgeleri`}
+                className="flex h-9 w-7 shrink-0 items-center justify-center text-slate-400"
+              >
+                {expanded.has(node.id) || term ? (
+                  <ChevronDown size={15} />
+                ) : (
+                  <ChevronRight size={15} />
+                )}
+              </button>
+            ) : (
+              <span className="w-7 shrink-0" />
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                onChange(String(node.id));
+                setOpen(false);
+                setQuery("");
+              }}
+              className={`flex min-h-10 min-w-0 flex-1 items-center justify-between gap-2 py-2 pr-3 text-left text-sm ${isSelected ? "font-semibold text-blue-700" : "text-slate-700"}`}
+            >
+              <span className="truncate">{node.name}</span>
+              {isSelected && (
+                <Check size={16} className="shrink-0 text-blue-600" />
+              )}
+            </button>
+          </div>
+          {visibleChildren.length > 0 && (
+            <div>{renderNodes(visibleChildren, depth + 1)}</div>
+          )}
+        </div>
+      );
+    });
+  return (
+    <div ref={ref} className="relative min-w-0">
+      <p className="mb-2 text-xs font-semibold text-slate-600">Bölge</p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex h-11 w-full items-center gap-2 rounded-xl border bg-white px-3 text-left text-sm transition hover:border-blue-400 ${value !== "" ? "border-blue-300 text-blue-700" : "border-slate-200 text-slate-700"}`}
+      >
+        <MapPin size={17} className="shrink-0 text-slate-400" />
+        <span className="min-w-0 flex-1 truncate">
+          {selected?.ad ?? selected?.name ?? "Tüm bölgeler"}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-[60] mt-2 w-[min(350px,calc(100vw-48px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+          <div className="border-b border-slate-100 p-3">
+            <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3">
+              <Search size={15} className="text-slate-400" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Bölge ara..."
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setQuery("");
+                setOpen(false);
+              }}
+              className="mt-2 w-full rounded-lg px-2 py-2 text-left text-xs font-semibold text-blue-600 hover:bg-blue-50"
+            >
+              Tüm bölgeler
+            </button>
+          </div>
+          <div className="max-h-72 overflow-y-auto p-1.5">
+            {renderNodes(tree)}
+          </div>
+          <p className="border-t border-slate-100 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+            Üst bölge seçilirse alt bölgeler de aranır.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeaturesDropdown({ features, selectedIds, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    const escape = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const visible = features.filter((f) =>
+    (f.ozellikAdi ?? f.ad ?? "")
+      .toLocaleLowerCase("tr-TR")
+      .includes(query.toLocaleLowerCase("tr-TR")),
+  );
+  const toggle = (id) =>
+    onChange(
+      selectedIds.includes(id)
+        ? selectedIds.filter((v) => v !== id)
+        : [...selectedIds, id],
+    );
+  return (
+    <div ref={ref} className="relative min-w-0">
+      <p className="mb-2 text-xs font-semibold text-slate-600">
+        Emlak özellikleri
+      </p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex h-11 w-full items-center gap-2 rounded-xl border bg-white px-3 text-left text-sm hover:border-blue-400 ${selectedIds.length ? "border-blue-300 text-blue-700" : "border-slate-200 text-slate-700"}`}
+      >
+        <ListChecks size={17} className="shrink-0 text-slate-400" />
+        <span className="min-w-0 flex-1 truncate">
+          {selectedIds.length
+            ? `${selectedIds.length} özellik seçildi`
+            : "Tüm özellikler"}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-slate-400 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-full min-w-[260px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 p-3">
+            <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-2">
+              <Search size={15} className="text-slate-400" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Özellik ara..."
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+              />
+            </div>
+            <div className="mt-2 flex justify-between text-xs">
+              <span className="text-slate-500">
+                {selectedIds.length} seçili
+              </span>
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="font-semibold text-blue-600"
+              >
+                Temizle
+              </button>
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto p-1.5">
+            {visible.map((f) => {
+              const id = Number(f.id);
+              const checked = selectedIds.includes(id);
+              return (
+                <button
+                  type="button"
+                  key={id}
+                  onClick={() => toggle(id)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-blue-50"
+                >
+                  <span
+                    className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border ${checked ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"}`}
+                  >
+                    {checked && <Check size={13} strokeWidth={3} />}
+                  </span>
+                  <span className="flex-1 text-slate-700">
+                    {f.ozellikAdi ?? f.ad ?? `Özellik #${id}`}
+                  </span>
+                </button>
+              );
+            })}
+            {!visible.length && (
+              <p className="px-3 py-4 text-center text-xs text-slate-500">
+                Özellik bulunamadı.
+              </p>
+            )}
+          </div>
+          <div className="border-t border-slate-100 p-2 text-right">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white"
+            >
+              Tamam
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function EmlakAraPage() {
-  // Filters
   const [filters, setFilters] = useState(createInitialFilters);
+
   const [appliedFilters, setAppliedFilters] = useState(createInitialFilters);
 
-  // Options
   const [bolgeler, setBolgeler] = useState([]);
+
   const [features, setFeatures] = useState([]);
+
   const [optionsError, setOptionsError] = useState("");
 
-  // Results
   const [emlaklar, setEmlaklar] = useState([]);
+
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Server-side pagination
   const [page, setPage] = useState(1);
+
   const [pageSize, setPageSize] = useState(10);
+
   const [totalCount, setTotalCount] = useState(0);
 
-  // API state
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState("");
+
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Sharing
   const [creatingLink, setCreatingLink] = useState(false);
-  const [shareUrl, setShareUrl] = useState("");
-  const [shareError, setShareError] = useState("");
-  const [copied, setCopied] = useState(false);
 
-  // -------------------------------------------
-  // Load filter options
-  // -------------------------------------------
+  const [shareUrl, setShareUrl] = useState("");
+
+  const [shareError, setShareError] = useState("");
+
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -247,22 +672,22 @@ export default function EmlakAraPage() {
     };
   }, []);
 
-  // -------------------------------------------
-  // Load paged results from backend
-  // -------------------------------------------
-
   useEffect(() => {
     let active = true;
 
     const load = async () => {
       setLoading(true);
+
       setError("");
+
       setEmlaklar([]);
 
       try {
         const result = await advancedSearch({
           ...buildQuery(appliedFilters),
+
           page,
+
           pageSize,
         });
 
@@ -273,6 +698,7 @@ export default function EmlakAraPage() {
         }
 
         setEmlaklar(result.items.map(normalizeEmlak));
+
         setTotalCount(Number(result.totalCount ?? 0));
       } catch (err) {
         if (!active) return;
@@ -286,6 +712,7 @@ export default function EmlakAraPage() {
         );
 
         setEmlaklar([]);
+
         setTotalCount(0);
       } finally {
         if (active) setLoading(false);
@@ -299,26 +726,23 @@ export default function EmlakAraPage() {
     };
   }, [appliedFilters, page, pageSize, reloadKey]);
 
-  // -------------------------------------------
-  // Computed values
-  // -------------------------------------------
-
   const regionOptions = useMemo(() => makeRegionOptions(bolgeler), [bolgeler]);
 
   const regionMap = useMemo(
     () => new Map(bolgeler.map((b) => [Number(b.id), b.ad])),
+
     [bolgeler],
   );
 
   const typeOptions = useMemo(
     () =>
       Object.entries(EMLAK_TIPLERI).map(([value, label]) => ({ value, label })),
+
     [],
   );
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  // Backend zaten sadece ilgili sayfayı gönderiyor.
   const visibleEmlaklar = emlaklar;
 
   const visibleIds = visibleEmlaklar.map((e) => e.id);
@@ -326,13 +750,10 @@ export default function EmlakAraPage() {
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
-  // -------------------------------------------
-  // Filters
-  // -------------------------------------------
-
   const changeFilter = useCallback((key, value) => {
     setFilters((previous) => ({
       ...previous,
+
       [key]: value,
     }));
   }, []);
@@ -340,6 +761,7 @@ export default function EmlakAraPage() {
   const toggleFeature = (id) => {
     setFilters((previous) => ({
       ...previous,
+
       ozellikIds: previous.ozellikIds.includes(id)
         ? previous.ozellikIds.filter((x) => x !== id)
         : [...previous.ozellikIds, id],
@@ -348,7 +770,9 @@ export default function EmlakAraPage() {
 
   const clearShare = () => {
     setShareUrl("");
+
     setShareError("");
+
     setCopied(false);
   };
 
@@ -357,21 +781,27 @@ export default function EmlakAraPage() {
 
     if (Boolean(filters.giris) !== Boolean(filters.cikis)) {
       setError("Giriş ve çıkış tarihlerini birlikte seçmelisiniz.");
+
       return;
     }
 
     if (filters.giris && filters.cikis <= filters.giris) {
       setError("Çıkış tarihi giriş tarihinden sonra olmalı.");
+
       return;
     }
 
     setError("");
+
     setPage(1);
+
     setSelectedIds([]);
+
     clearShare();
 
     setAppliedFilters({
       ...filters,
+
       ozellikIds: [...filters.ozellikIds],
     });
 
@@ -380,17 +810,19 @@ export default function EmlakAraPage() {
 
   const handleReset = () => {
     setFilters(createInitialFilters());
+
     setAppliedFilters(createInitialFilters());
+
     setSelectedIds([]);
+
     setPage(1);
+
     setError("");
+
     clearShare();
+
     setReloadKey((value) => value + 1);
   };
-
-  // -------------------------------------------
-  // Selections
-  // -------------------------------------------
 
   const toggleSelected = (id) => {
     setSelectedIds((previous) =>
@@ -416,12 +848,9 @@ export default function EmlakAraPage() {
 
   const handleClearSelection = () => {
     setSelectedIds([]);
+
     clearShare();
   };
-
-  // -------------------------------------------
-  // Create link
-  // -------------------------------------------
 
   const handleCreateLink = async () => {
     if (selectedIds.length === 0 || selectedIds.length > 50 || creatingLink) {
@@ -429,15 +858,21 @@ export default function EmlakAraPage() {
     }
 
     setCreatingLink(true);
+
     setShareError("");
+
     setShareUrl("");
+
     setCopied(false);
 
     try {
       const response = await createEmlakPaylasim({
         baslik: "Size Özel Villa Önerileri",
+
         girisTarihi: appliedFilters.giris || null,
+
         cikisTarihi: appliedFilters.cikis || null,
+
         emlakIds: selectedIds,
       });
 
@@ -470,25 +905,25 @@ export default function EmlakAraPage() {
 
     try {
       await navigator.clipboard.writeText(shareUrl);
+
       setCopied(true);
+
       setShareError("");
     } catch {
       setShareError("Link kopyalanamadı. Manuel olarak kopyalayabilirsiniz.");
     }
   };
 
-  // -------------------------------------------
-  // JSX
-  // -------------------------------------------
-
   return (
     <div className="space-y-6">
       {/* PAGE HEADER */}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">
             Emlak Ara
           </h1>
+
           <p className="mt-2 text-sm text-slate-500">
             Müşteriniz için uygun villaları arayın ve teklif listenizi
             oluşturun.
@@ -508,15 +943,18 @@ export default function EmlakAraPage() {
       </div>
 
       {/* FILTER CARD */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+      <section className="relative rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-5 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
             <SlidersHorizontal size={20} />
           </div>
+
           <div>
             <h2 className="text-sm font-bold text-slate-900">
               Gelişmiş Filtreler
             </h2>
+
             <p className="mt-1 text-xs text-slate-500">
               Boş bırakılan filtreler uygulanmaz.
             </p>
@@ -546,40 +984,20 @@ export default function EmlakAraPage() {
               />
             </FilterField>
 
-            <FilterField label="Bölge" id="bolgeId">
-              <select
-                id="bolgeId"
-                value={filters.bolgeId}
-                onChange={(e) => changeFilter("bolgeId", e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Tüm bölgeler</option>
-                {regionOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[11px] text-slate-400">
-                Alt bölgeler de aranır.
-              </p>
-            </FilterField>
+            <RegionDropdown
+              regions={bolgeler}
+              value={filters.bolgeId}
+              onChange={(value) => changeFilter("bolgeId", value)}
+            />
 
-            <FilterField label="Emlak tipi" id="emlakTipi">
-              <select
-                id="emlakTipi"
-                value={filters.emlakTipi}
-                onChange={(e) => changeFilter("emlakTipi", e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Tüm tipler</option>
-                {typeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
+            <FilterDropdown
+              title="Emlak tipi"
+              value={filters.emlakTipi}
+              placeholder="Tüm tipler"
+              options={typeOptions}
+              onChange={(value) => changeFilter("emlakTipi", value)}
+              icon={House}
+            />
 
             <FilterField label="Minimum kapasite" id="minKapasite">
               <input
@@ -617,80 +1035,33 @@ export default function EmlakAraPage() {
               />
             </FilterField>
 
-            <FilterField label="Havuz korunak tipi" id="havuzKorunakTipi">
-              <select
-                id="havuzKorunakTipi"
-                value={filters.havuzKorunakTipi}
-                onChange={(e) =>
-                  changeFilter("havuzKorunakTipi", e.target.value)
-                }
-                className={inputClass}
-              >
-                <option value="">Tümü</option>
-                {HAVUZ_KORUNAK_TIPLERI.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
+            <FilterDropdown
+              title="Havuz korunak tipi"
+              value={filters.havuzKorunakTipi}
+              placeholder="Tüm havuz tipleri"
+              options={HAVUZ_KORUNAK_TIPLERI}
+              onChange={(value) => changeFilter("havuzKorunakTipi", value)}
+              icon={Waves}
+            />
           </div>
 
-          {/* FEATURES */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-slate-700">
-                Emlak özellikleri
-              </p>
-
-              {filters.ozellikIds.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => changeFilter("ozellikIds", [])}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                >
-                  Seçimi temizle
-                </button>
-              )}
-            </div>
-
-            <div className="grid max-h-44 grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2 lg:grid-cols-4">
-              {features.length === 0 ? (
-                <p className="text-xs text-slate-400">
-                  Henüz özellik bulunamadı.
-                </p>
-              ) : (
-                features.map((feature) => {
-                  const id = Number(feature.id);
-
-                  return (
-                    <label
-                      key={id}
-                      className="flex cursor-pointer items-center gap-2 text-xs text-slate-600"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={filters.ozellikIds.includes(id)}
-                        onChange={() => toggleFeature(id)}
-                        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
-                      />
-                      {feature.ozellikAdi ?? feature.ad ?? `Özellik #${id}`}
-                    </label>
-                  );
-                })
-              )}
-            </div>
-
-            <p className="mt-3 text-[11px] text-slate-400">
-              Seçilen özelliklerin tümüne sahip emlaklar bulunur.
-            </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <FeaturesDropdown
+              features={features}
+              selectedIds={filters.ozellikIds}
+              onChange={(value) => changeFilter("ozellikIds", value)}
+            />
           </div>
+          <p className="text-[11px] text-slate-400">
+            Seçilen özelliklerin tümüne sahip emlaklar bulunur.
+          </p>
 
           {optionsError && (
             <p className="text-xs text-amber-700">{optionsError}</p>
           )}
 
           {/* FILTER ACTIONS */}
+
           <div className="flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-5">
             <button
               type="button"
@@ -719,16 +1090,19 @@ export default function EmlakAraPage() {
       </section>
 
       {/* RESULTS */}
+
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-5 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <House size={20} />
             </div>
+
             <div>
               <h2 className="text-sm font-bold text-slate-900">
                 Arama Sonuçları
               </h2>
+
               <p className="mt-1 text-xs text-slate-500">
                 {loading ? "Yükleniyor..." : `${totalCount} emlak bulundu`}
               </p>
@@ -742,11 +1116,13 @@ export default function EmlakAraPage() {
             >
               Sayfa başına
             </label>
+
             <select
               id="pageSize"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
+
                 setPage(1);
               }}
               className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
@@ -766,6 +1142,7 @@ export default function EmlakAraPage() {
             className="mx-5 mt-5 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600"
           >
             <AlertCircle size={19} />
+
             {error}
           </div>
         )}
@@ -773,6 +1150,7 @@ export default function EmlakAraPage() {
         {loading ? (
           <div className="flex min-h-[300px] flex-col items-center justify-center gap-3">
             <Loader2 size={30} className="animate-spin text-blue-600" />
+
             <p className="text-sm text-slate-500">Emlaklar yükleniyor...</p>
           </div>
         ) : (
@@ -791,12 +1169,19 @@ export default function EmlakAraPage() {
                         className="h-4 w-4 accent-blue-600"
                       />
                     </th>
+
                     <th className="px-4 py-4">Emlak</th>
+
                     <th className="px-4 py-4">Bölge</th>
+
                     <th className="px-4 py-4">Tip</th>
+
                     <th className="px-4 py-4">Kapasite</th>
+
                     <th className="px-4 py-4">Yatak Odası</th>
+
                     <th className="px-4 py-4">Banyo</th>
+
                     <th className="px-4 py-4 text-right">Detay</th>
                   </tr>
                 </thead>
@@ -825,11 +1210,11 @@ export default function EmlakAraPage() {
                         </td>
 
                         {/* PHOTO + NAME */}
+
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
                             <div className="flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
                               {imageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={imageUrl}
                                   alt={emlak.emlakAdi}
@@ -837,6 +1222,7 @@ export default function EmlakAraPage() {
                                   className="h-full w-full object-cover"
                                   onError={(e) => {
                                     e.currentTarget.style.display = "none";
+
                                     e.currentTarget.nextElementSibling?.classList.remove(
                                       "hidden",
                                     );
@@ -858,6 +1244,7 @@ export default function EmlakAraPage() {
                               <p className="max-w-[200px] truncate text-sm font-bold text-slate-900">
                                 {emlak.emlakAdi}
                               </p>
+
                               <p className="mt-1 text-xs text-slate-400">
                                 #{emlak.id}
                               </p>
@@ -866,9 +1253,11 @@ export default function EmlakAraPage() {
                         </td>
 
                         {/* REGION */}
+
                         <td className="px-4 py-4">
                           <span className="flex items-center gap-1.5 text-sm text-slate-600">
                             <MapPin size={15} className="text-slate-400" />
+
                             {regionMap.get(Number(emlak.bolgeId)) ||
                               emlak.bolgeAdi ||
                               "-"}
@@ -876,6 +1265,7 @@ export default function EmlakAraPage() {
                         </td>
 
                         {/* TYPE */}
+
                         <td className="px-4 py-4">
                           <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
                             {emlak.emlakTipiAdi}
@@ -883,30 +1273,37 @@ export default function EmlakAraPage() {
                         </td>
 
                         {/* CAPACITY */}
+
                         <td className="px-4 py-4">
                           <span className="flex items-center gap-1.5 text-sm text-slate-600">
                             <UsersRound size={16} className="text-slate-400" />
+
                             {emlak.kapasite ?? "-"}
                           </span>
                         </td>
 
                         {/* BEDROOMS */}
+
                         <td className="px-4 py-4">
                           <span className="flex items-center gap-1.5 text-sm text-slate-600">
                             <BedDouble size={16} className="text-slate-400" />
+
                             {emlak.yatakOdasiSayisi}
                           </span>
                         </td>
 
                         {/* BATHROOMS */}
+
                         <td className="px-4 py-4">
                           <span className="flex items-center gap-1.5 text-sm text-slate-600">
                             <Bath size={16} className="text-slate-400" />
+
                             {emlak.banyoSayisi}
                           </span>
                         </td>
 
                         {/* DETAILS */}
+
                         <td className="px-4 py-4 text-right">
                           <Link
                             href={`/emlaklar/${emlak.id}`}
@@ -926,9 +1323,11 @@ export default function EmlakAraPage() {
               {!visibleEmlaklar.length && (
                 <div className="flex min-h-60 flex-col items-center justify-center px-6 text-center">
                   <House size={28} className="mb-3 text-slate-400" />
+
                   <p className="text-sm font-semibold text-slate-800">
                     Emlak bulunamadı
                   </p>
+
                   <p className="mt-2 text-xs text-slate-500">
                     Filtrelerinizi değiştirip tekrar arayabilirsiniz.
                   </p>
@@ -937,6 +1336,7 @@ export default function EmlakAraPage() {
             </div>
 
             {/* SERVER-SIDE PAGINATION */}
+
             <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
               <p className="text-xs text-slate-500">
                 Toplam <strong className="text-slate-700">{totalCount}</strong>{" "}
@@ -995,6 +1395,7 @@ export default function EmlakAraPage() {
       </section>
 
       {/* SHARE LINK RESULT */}
+
       {(shareError || shareUrl) && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           {shareError && (
@@ -1003,6 +1404,7 @@ export default function EmlakAraPage() {
               className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600"
             >
               <AlertCircle size={19} />
+
               {shareError}
             </div>
           )}
@@ -1013,10 +1415,12 @@ export default function EmlakAraPage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                   <Link2 size={21} />
                 </div>
+
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
                     Paylaşım Linki Hazır
                   </h3>
+
                   <p className="mt-1 text-xs text-slate-500">
                     Seçtiğiniz emlaklar için özel bağlantı oluşturuldu.
                   </p>
@@ -1043,6 +1447,7 @@ export default function EmlakAraPage() {
                   }`}
                 >
                   {copied ? <Check size={17} /> : <Copy size={17} />}
+
                   {copied ? "Kopyalandı" : "Linki Kopyala"}
                 </button>
 
@@ -1066,6 +1471,7 @@ export default function EmlakAraPage() {
       )}
 
       {/* SELECTION BAR */}
+
       <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-5 py-4 shadow-lg backdrop-blur sm:px-6">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -1076,6 +1482,7 @@ export default function EmlakAraPage() {
             <p className="text-sm font-bold text-slate-900">
               {selectedIds.length} emlak seçildi
             </p>
+
             <p className="text-xs text-slate-500">
               Seçimler sayfalar arasında korunur.
             </p>
@@ -1108,6 +1515,7 @@ export default function EmlakAraPage() {
             ) : (
               <Link2 size={17} />
             )}
+
             {creatingLink ? "Oluşturuluyor..." : "Link Oluştur"}
           </button>
         </div>

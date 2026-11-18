@@ -15,6 +15,9 @@ import {
   ExternalLink,
   Hash,
   CalendarClock,
+  Percent,
+  ArrowDownToLine,
+  HandCoins,
 } from "lucide-react";
 
 import { getDurumClass, getRezervasyonDurumu } from "@/constants/rezervasyon";
@@ -27,14 +30,17 @@ import {
 } from "@/utils/rezervasyon";
 
 import { useEffect, useState } from "react";
+
 import { getEmlakById } from "@/app/services/emlak.service";
 
 // Ortak bilgi kartı
+
 function DetailField({ icon: Icon, label, value }) {
   return (
     <div className="rounded-xl bg-slate-50 p-4">
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <Icon size={15} />
+
         {label}
       </div>
 
@@ -46,6 +52,7 @@ function DetailField({ icon: Icon, label, value }) {
 }
 
 // Bölüm başlığı
+
 function SectionTitle({ icon: Icon, children }) {
   return (
     <div className="mb-4 flex items-center gap-2.5">
@@ -60,10 +67,13 @@ function SectionTitle({ icon: Icon, children }) {
 
 export default function RezervasyonDetailDrawer({
   reservation,
+
   emlakName,
+
   onClose,
 }) {
   // ESC ile kapatma
+
   useEffect(() => {
     if (!reservation) return;
 
@@ -81,6 +91,7 @@ export default function RezervasyonDetailDrawer({
   }, [reservation, onClose]);
 
   // Drawer açıkken arka plan scroll kilidi
+
   useEffect(() => {
     if (!reservation) return;
 
@@ -94,6 +105,7 @@ export default function RezervasyonDetailDrawer({
   }, [reservation]);
 
   const [emlak, setEmlak] = useState(null);
+
   const [loadingEmlak, setLoadingEmlak] = useState(false);
 
   useEffect(() => {
@@ -101,7 +113,9 @@ export default function RezervasyonDetailDrawer({
 
     if (!emlakId) {
       setEmlak(null);
+
       setLoadingEmlak(false);
+
       return;
     }
 
@@ -109,6 +123,7 @@ export default function RezervasyonDetailDrawer({
 
     const loadEmlak = async () => {
       setEmlak(null);
+
       setLoadingEmlak(true);
 
       try {
@@ -151,24 +166,55 @@ export default function RezervasyonDetailDrawer({
 
   const toplamFiyat = konaklamaFiyati + temizlikUcreti;
 
+  // Kaydedilmiş rezervasyon tutarlarını kullan; güncel emlak oranıyla tekrar hesaplama.
+  const onOdemeTutari =
+    reservation.onOdemeTutari == null
+      ? null
+      : Number(reservation.onOdemeTutari);
+
+  const komisyonTutari =
+    reservation.komisyonTutari == null
+      ? null
+      : Number(reservation.komisyonTutari);
+
+  // Temizlik ücreti toplama dahil olduğu için kalan ödeme de dahil eder.
+  const kalanOdeme = onOdemeTutari == null ? null : toplamFiyat - onOdemeTutari;
+
+  // Oran rezervasyon snapshot'ında tutulmadığından kaydedilmiş komisyon
+  // tutarının konaklama bedeline oranından türetiyoruz.
+  const komisyonOrani =
+    komisyonTutari != null && konaklamaFiyati > 0
+      ? (komisyonTutari / konaklamaFiyati) * 100
+      : null;
+
+  const formatOran = (value) =>
+    value == null
+      ? "-"
+      : `%${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value)}`;
+
   const nights = calculateNights(
     reservation.girisTarihi ?? reservation.baslangicTarihi,
+
     reservation.cikisTarihi ?? reservation.bitisTarihi,
   );
 
   const musteriAdSoyad =
     reservation.musteriAdSoyad ||
     [reservation.musteriAd, reservation.musteriSoyad]
+
       .filter(Boolean)
+
       .join(" ") ||
     "Belirtilmemiş";
 
   const telefon = reservation.telefon;
+
   const email = reservation.email;
 
   return (
     <div className="fixed inset-0 z-[100]">
       {/* Arka plan */}
+
       <div
         className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
         onClick={onClose}
@@ -176,6 +222,7 @@ export default function RezervasyonDetailDrawer({
       />
 
       {/* Sağ detay paneli */}
+
       <aside
         role="dialog"
         aria-modal="true"
@@ -183,6 +230,7 @@ export default function RezervasyonDetailDrawer({
         className="absolute inset-y-0 right-0 flex w-full max-w-[500px] flex-col bg-white shadow-2xl"
       >
         {/* HEADER */}
+
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 p-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">
@@ -216,13 +264,16 @@ export default function RezervasyonDetailDrawer({
         </div>
 
         {/* SCROLLABLE CONTENT */}
+
         <div className="flex-1 space-y-6 overflow-y-auto p-6">
           {/* MÜŞTERİ BİLGİLERİ */}
+
           <section>
             <SectionTitle icon={UserRound}>Müşteri Bilgileri</SectionTitle>
 
             <div className="rounded-2xl border border-slate-200 p-5">
               {/* Müşteri profil alanı */}
+
               <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-5">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                   <UserRound size={23} />
@@ -241,6 +292,7 @@ export default function RezervasyonDetailDrawer({
 
               <div className="space-y-3">
                 {/* Telefon */}
+
                 <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500">
                     <Phone size={18} />
@@ -265,6 +317,7 @@ export default function RezervasyonDetailDrawer({
                 </div>
 
                 {/* E-posta */}
+
                 <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500">
                     <Mail size={18} />
@@ -292,6 +345,7 @@ export default function RezervasyonDetailDrawer({
           </section>
 
           {/* EMLAK BİLGİLERİ */}
+
           <section>
             <SectionTitle icon={House}>Emlak Bilgileri</SectionTitle>
 
@@ -318,6 +372,7 @@ export default function RezervasyonDetailDrawer({
           </section>
 
           {/* KONAKLAMA BİLGİLERİ */}
+
           <section>
             <SectionTitle icon={CalendarDays}>Konaklama Bilgileri</SectionTitle>
 
@@ -358,14 +413,12 @@ export default function RezervasyonDetailDrawer({
 
           {/* FİYAT BİLGİLERİ */}
 
-          {/* FİYAT BİLGİLERİ */}
-
-          {/* FİYAT BİLGİLERİ */}
           <section>
             <SectionTitle icon={Wallet}>Fiyat Bilgileri</SectionTitle>
 
             <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
               {/* KONAKLAMA FİYATI */}
+
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-slate-600">Konaklama Fiyatı</span>
 
@@ -375,6 +428,7 @@ export default function RezervasyonDetailDrawer({
               </div>
 
               {/* TEMİZLİK ÜCRETİ */}
+
               <div className="mt-4 flex items-center justify-between gap-3">
                 <span className="text-sm text-slate-600">Temizlik Ücreti</span>
 
@@ -384,6 +438,7 @@ export default function RezervasyonDetailDrawer({
               </div>
 
               {/* TOPLAM FİYAT */}
+
               <div className="mt-5 border-t border-blue-200 pt-4">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-bold text-slate-900">
@@ -396,7 +451,34 @@ export default function RezervasyonDetailDrawer({
                 </div>
               </div>
 
+              {/* ÖN ÖDEME VE KALAN ÖDEME */}
+              <div className="mt-4 space-y-3 border-t border-blue-200 pt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 text-sm text-slate-700">
+                    <ArrowDownToLine size={16} className="text-blue-600" />
+                    Ön Ödeme Tutarı
+                  </span>
+                  <span className="text-base font-bold text-blue-700">
+                    {onOdemeTutari == null ? "-" : formatMoney(onOdemeTutari)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-slate-800">
+                    Kalan Ödeme Tutarı
+                  </span>
+                  <span className="text-base font-bold text-slate-900">
+                    {kalanOdeme == null ? "-" : formatMoney(kalanOdeme)}
+                  </span>
+                </div>
+                <p className="text-xs leading-5 text-blue-700/80">
+                  Ön ödeme konaklama bedeli üzerinden hesaplanır. Kalan tutar,
+                  temizlik ücreti dahil toplam fiyattan ön ödemenin
+                  çıkarılmasıdır. Bu değerler tahsilat durumunu göstermez.
+                </p>
+              </div>
+
               {/* GECELİK ORTALAMA */}
+
               {nights != null && nights > 0 && (
                 <div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3">
                   <span className="text-xs text-slate-500">
@@ -411,6 +493,7 @@ export default function RezervasyonDetailDrawer({
             </div>
 
             {/* HASAR DEPOZİTOSU */}
+
             {hasarDepozitosu > 0 && (
               <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <div className="flex items-center justify-between gap-3">
@@ -443,7 +526,35 @@ export default function RezervasyonDetailDrawer({
             )}
           </section>
 
+          {/* ACENTE KOMİSYONU */}
+          <section>
+            <SectionTitle icon={Percent}>Acente Komisyonu</SectionTitle>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-slate-700">Komisyon Oranı</span>
+                <span className="text-sm font-bold text-emerald-800">
+                  {formatOran(komisyonOrani)}
+                </span>
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-emerald-200 pt-4">
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <HandCoins size={16} className="text-emerald-700" />
+                  Komisyon Tutarı
+                </span>
+                <span className="text-lg font-bold text-emerald-700">
+                  {komisyonTutari == null ? "-" : formatMoney(komisyonTutari)}
+                </span>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Komisyon, rezervasyonun kayıtlı konaklama bedeli üzerinden
+                hesaplanmıştır. Oran, kayıtlı komisyon tutarından türetilir;
+                sonradan değişen emlak komisyon oranı kullanılmaz.
+              </p>
+            </div>
+          </section>
+
           {/* KAYIT BİLGİLERİ */}
+
           <section>
             <SectionTitle icon={CalendarClock}>Kayıt Bilgileri</SectionTitle>
 
@@ -472,6 +583,7 @@ export default function RezervasyonDetailDrawer({
         </div>
 
         {/* FOOTER */}
+
         <div className="shrink-0 border-t border-slate-100 bg-white p-5">
           <button
             type="button"

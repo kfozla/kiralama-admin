@@ -204,8 +204,8 @@ export default function RezervasyonlarPage() {
 
           return {
             ...base,
+            ...item,
 
-            // Yeni DTO alanlarının korunması
             id: item.id,
             emlakId: item.emlakId,
             emlakAdi: item.emlakAdi,
@@ -228,7 +228,14 @@ export default function RezervasyonlarPage() {
             cikisTarihi: item.cikisTarihi,
 
             kisiSayisi: item.kisiSayisi,
+
             toplamFiyat: item.toplamFiyat,
+            temizlikUcreti: item.temizlikUcreti,
+            hasarDepozitosu: item.hasarDepozitosu,
+
+            // MUHASEBE ALANLARI
+            onOdemeTutari: item.onOdemeTutari,
+            komisyonTutari: item.komisyonTutari,
 
             durum: Number(item.durum),
 

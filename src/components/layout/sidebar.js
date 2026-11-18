@@ -80,6 +80,13 @@ const rezervasyonMenu = [
     icon: CalendarRange,
   },
 ];
+const muhasebeMenu = [
+  {
+    label: "Muhasebe",
+    href: "/muhasebe",
+    icon: Wallet,
+  },
+];
 
 const managementMenu = [
   {
@@ -200,6 +207,12 @@ export default function Sidebar({ isOpen, onClose }) {
         <MenuGroup
           title="Rezervasyon İşlemleri"
           items={rezervasyonMenu}
+          pathname={pathname}
+          onClose={onClose}
+        />
+        <MenuGroup
+          title="Muhasebe"
+          items={muhasebeMenu}
           pathname={pathname}
           onClose={onClose}
         />

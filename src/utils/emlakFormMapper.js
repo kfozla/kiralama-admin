@@ -21,6 +21,7 @@ export const EMLAK_DEFAULT_VALUES = {
   longitude: "",
   otoparkSayisi: 0,
   belgeNo: "",
+  komisyonOrani: 20,
 };
 
 function toNumber(value, fallback = undefined) {
@@ -109,6 +110,7 @@ export function emlakToFormValues(response) {
     longitude: item.longitude == null ? "" : String(item.longitude),
     otoparkSayisi: item.otoparkSayisi ?? 0,
     belgeNo: item.belgeNo ?? "",
+    komisyonOrani: Number(item.komisyonOrani ?? 20),
   };
 }
 
@@ -154,5 +156,6 @@ export function buildEmlakPayload(values) {
         : Number(values.longitude),
     otoparkSayisi: Number(values.otoparkSayisi),
     belgeNo: values.belgeNo?.trim() || null,
+    komisyonOrani: Number(values.komisyonOrani),
   };
 }

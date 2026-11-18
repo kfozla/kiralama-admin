@@ -1,22 +1,16 @@
 "use client";
-
 import { useEffect, useState } from "react";
-
 import { useRouter } from "next/navigation";
-
 import { FormProvider, useForm, useWatch, Controller } from "react-hook-form";
-
 import { zodResolver } from "@hookform/resolvers/zod";
-
 import RichTextEditor from "@/components/ayarlar/richTextEditor";
-
 import BolgeSearch from "@/components/bolge/bolgeSearch";
-
 import {
   House,
   UsersRound,
   FileText,
   Clock3,
+  Percent,
   ListChecks,
   Waves,
   MapPin,
@@ -25,106 +19,66 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-
 import FormSection from "./formSection";
-
 import EmlakOzellikSecimi from "./emlakOzellikSecimi";
-
 import HavuzBilgileri from "./havuzBilgileri";
-
 import { emlakSchema } from "@/schemas/emlak.schema";
-
 import { EMLAK_TIPLERI } from "@/constants/emlak";
-
 import { getBolgeler } from "@/app/services/bolge.service";
-
 import { getEmlakOzellikler } from "@/app/services/emlakOzellik.service";
-
 import EmlakSahibiSearch from "../emlakSahibiSearch";
-
 import {
   getEmlakById,
   createEmlak,
   updateEmlak,
 } from "@/app/services/emlak.service";
-
 import {
   EMLAK_DEFAULT_VALUES,
   emlakToFormValues,
   buildEmlakPayload,
 } from "@/utils/emlakFormMapper";
-
 const inputClass =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
-
 function FieldError({ error }) {
   if (!error) return null;
-
   return <p className="mt-1.5 text-xs text-red-500">{error.message}</p>;
 }
-
 function extractList(data) {
   if (Array.isArray(data)) return data;
-
   if (Array.isArray(data?.items)) return data.items;
-
   if (Array.isArray(data?.data)) return data.data;
-
   return [];
 }
-
-export default function emlakForm({ emlakId = null }) {
+export default function EmlakForm({ emlakId = null }) {
   const router = useRouter();
-
   const isEditMode = emlakId !== null && emlakId !== undefined;
-
   const [emlakLoading, setEmlakLoading] = useState(isEditMode);
-
   const [emlakError, setEmlakError] = useState("");
-
   const [submitError, setSubmitError] = useState("");
-
   const [bolgeler, setBolgeler] = useState([]);
-
   const [features, setFeatures] = useState([]);
-
   const [optionsLoading, setOptionsLoading] = useState(true);
-
   const [optionsError, setOptionsError] = useState("");
-
   const methods = useForm({
     resolver: zodResolver(emlakSchema),
-
     defaultValues: EMLAK_DEFAULT_VALUES,
-
     mode: "onTouched",
   });
-
   const { reset } = methods;
-
   useEffect(() => {
     if (!isEditMode) return;
-
     let active = true;
-
     const loadEmlak = async () => {
       setEmlakLoading(true);
-
       setEmlakError("");
-
       try {
         const data = await getEmlakById(emlakId);
-
         if (!active) return;
-
         const formValues = emlakToFormValues(data);
-
         reset(formValues);
       } catch (error) {
         if (!active) return;
-
         console.error("Emlak yüklenemedi:", error);
-
         setEmlakError(
           error.response?.data?.message || "Emlak bilgileri yüklenemedi.",
         );
@@ -134,49 +88,33 @@ export default function emlakForm({ emlakId = null }) {
         }
       }
     };
-
     loadEmlak();
-
     return () => {
       active = false;
     };
   }, [emlakId, isEditMode, reset]);
-
   const {
     register,
-
     control,
-
     setValue,
-
     formState: { errors, isSubmitting },
   } = methods;
-
   const selectedIds = useWatch({ control, name: "ozellikIds" }) || [];
-
   const featuredIds = useWatch({ control, name: "oneCikanOzellikIds" }) || [];
-
   useEffect(() => {
     let active = true;
-
     const loadOptions = async () => {
       try {
         const [bolgeData, ozellikData] = await Promise.all([
           getBolgeler(),
-
           getEmlakOzellikler(),
         ]);
-
         if (!active) return;
-
         setBolgeler(extractList(bolgeData));
-
         setFeatures(extractList(ozellikData));
       } catch (error) {
         if (!active) return;
-
         console.error("Form seçenekleri yüklenemedi:", error);
-
         setOptionsError(
           "Bölge, emlak sahibi veya özellik bilgileri yüklenemedi.",
         );
@@ -184,33 +122,25 @@ export default function emlakForm({ emlakId = null }) {
         if (active) setOptionsLoading(false);
       }
     };
-
     loadOptions();
-
     return () => {
       active = false;
     };
   }, []);
-
   const onSubmit = async (values) => {
     setSubmitError("");
-
     try {
       const payload = buildEmlakPayload(values);
       if (isEditMode) {
         console.log("Güncellenen payload:", payload);
-
         await updateEmlak(emlakId, payload);
       } else {
         await createEmlak(payload);
       }
-
       router.push("/emlaklar");
     } catch (error) {
       console.error("Emlak kaydetme hatası:", error);
-
       const data = error.response?.data;
-
       if (data?.errors) {
         const messages = Object.entries(data.errors).flatMap(
           ([field, errors]) =>
@@ -218,7 +148,6 @@ export default function emlakForm({ emlakId = null }) {
               (message) => `${field}: ${message}`,
             ),
         );
-
         setSubmitError(messages.join(" | "));
       } else {
         setSubmitError(
@@ -229,22 +158,18 @@ export default function emlakForm({ emlakId = null }) {
       }
     }
   };
-
   if (optionsLoading) {
     return (
       <div className="flex min-h-[350px] flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white">
         <Loader2 size={30} className="animate-spin text-blue-600" />
-
         <p className="text-sm text-slate-500">Form bilgileri yükleniyor...</p>
       </div>
     );
   }
-
   if (optionsError) {
     return (
       <div className="rounded-2xl border border-red-200 bg-white p-6">
         <p className="text-sm text-red-600">{optionsError}</p>
-
         <button
           type="button"
           onClick={() => window.location.reload()}
@@ -255,17 +180,14 @@ export default function emlakForm({ emlakId = null }) {
       </div>
     );
   }
-
   if (isEditMode && emlakLoading) {
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white">
         <Loader2 size={30} className="animate-spin text-blue-600" />
-
         <p className="text-sm text-slate-500">Emlak bilgileri yükleniyor...</p>
       </div>
     );
   }
-
   if (isEditMode && emlakError) {
     return (
       <div
@@ -273,12 +195,10 @@ export default function emlakForm({ emlakId = null }) {
         className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-600"
       >
         <AlertCircle size={20} />
-
         {emlakError}
       </div>
     );
   }
-
   return (
     <FormProvider {...methods}>
       <form
@@ -287,7 +207,6 @@ export default function emlakForm({ emlakId = null }) {
         className="space-y-6"
       >
         {/* TEMEL BİLGİLER */}
-
         <FormSection
           icon={House}
           title="Temel Bilgiler"
@@ -301,7 +220,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Emlak Adı <span className="text-red-500">*</span>
               </label>
-
               <input
                 id="emlakAdi"
                 type="text"
@@ -309,10 +227,8 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("emlakAdi")}
                 className={inputClass}
               />
-
               <FieldError error={errors.emlakAdi} />
             </div>
-
             <div>
               <label
                 htmlFor="emlakTipi"
@@ -320,7 +236,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Emlak Tipi <span className="text-red-500">*</span>
               </label>
-
               <select
                 id="emlakTipi"
                 defaultValue=""
@@ -330,24 +245,19 @@ export default function emlakForm({ emlakId = null }) {
                 className={inputClass}
               >
                 <option value="">Emlak tipi seçiniz</option>
-
                 {Object.entries(EMLAK_TIPLERI).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
               </select>
-
               <FieldError error={errors.emlakTipi} />
             </div>
-
             {/* Emlak Sahibi */}
-
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Emlak Sahibi <span className="text-red-500">*</span>
               </label>
-
               <EmlakSahibiSearch
                 control={control}
                 name="emlakSahibiId"
@@ -355,12 +265,10 @@ export default function emlakForm({ emlakId = null }) {
                 disabled={isSubmitting}
               />
             </div>
-
             <div className="relative ">
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Bölge <span className="text-red-500">*</span>
               </label>
-
               <BolgeSearch
                 control={control}
                 name="bolgeId"
@@ -368,12 +276,10 @@ export default function emlakForm({ emlakId = null }) {
                 disabled={isSubmitting}
                 placeholder="Emlak bölgesini seçiniz..."
               />
-
               <p className="mt-1.5 text-xs text-slate-500">
                 Emlağın bulunduğu il, ilçe veya alt bölgeyi seçiniz.
               </p>
             </div>
-
             <div className="md:col-span-2">
               <label
                 htmlFor="belgeNo"
@@ -396,9 +302,7 @@ export default function emlakForm({ emlakId = null }) {
             </div>
           </div>
         </FormSection>
-
         {/* KAPASİTE */}
-
         <FormSection
           icon={UsersRound}
           title="Kapasite ve Oda Bilgileri"
@@ -407,9 +311,7 @@ export default function emlakForm({ emlakId = null }) {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
               ["kapasite", "Kişi Kapasitesi", 1],
-
               ["yatakOdasiSayisi", "Yatak Odası", 0],
-
               ["banyoSayisi", "Banyo Sayısı", 0],
               ["otoparkSayisi", "Otopark Kapasitesi (Araç)", 0],
             ].map(([name, label, min]) => (
@@ -420,7 +322,6 @@ export default function emlakForm({ emlakId = null }) {
                 >
                   {label}
                 </label>
-
                 <input
                   id={name}
                   type="number"
@@ -432,15 +333,12 @@ export default function emlakForm({ emlakId = null }) {
                   })}
                   className={inputClass}
                 />
-
                 <FieldError error={errors[name]} />
               </div>
             ))}
           </div>
         </FormSection>
-
         {/* AÇIKLAMALAR */}
-
         <FormSection
           icon={FileText}
           title="Açıklamalar"
@@ -451,7 +349,6 @@ export default function emlakForm({ emlakId = null }) {
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Emlak Açıklaması
               </label>
-
               <Controller
                 name="aciklama"
                 control={control}
@@ -462,15 +359,12 @@ export default function emlakForm({ emlakId = null }) {
                   />
                 )}
               />
-
               <FieldError error={errors.aciklama} />
             </div>
-
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Genel Bilgiler
               </label>
-
               <Controller
                 name="genelBilgiler"
                 control={control}
@@ -481,14 +375,11 @@ export default function emlakForm({ emlakId = null }) {
                   />
                 )}
               />
-
               <FieldError error={errors.genelBilgiler} />
             </div>
           </div>
         </FormSection>
-
         {/* KONAKLAMA KOŞULLARI */}
-
         <FormSection
           icon={Clock3}
           title="Konaklama Koşulları ve Ek Ücretler"
@@ -502,7 +393,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Giriş Saati
               </label>
-
               <input
                 id="girisSaati"
                 type="time"
@@ -510,10 +400,8 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("girisSaati")}
                 className={inputClass}
               />
-
               <FieldError error={errors.girisSaati} />
             </div>
-
             <div>
               <label
                 htmlFor="cikisSaati"
@@ -521,7 +409,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Çıkış Saati
               </label>
-
               <input
                 id="cikisSaati"
                 type="time"
@@ -529,10 +416,8 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("cikisSaati")}
                 className={inputClass}
               />
-
               <FieldError error={errors.cikisSaati} />
             </div>
-
             <div>
               <label
                 htmlFor="minimumKonaklamaSuresi"
@@ -540,7 +425,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Minimum Konaklama (Gece)
               </label>
-
               <input
                 id="minimumKonaklamaSuresi"
                 type="number"
@@ -550,10 +434,8 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("minimumKonaklamaSuresi", { valueAsNumber: true })}
                 className={inputClass}
               />
-
               <FieldError error={errors.minimumKonaklamaSuresi} />
             </div>
-
             <div>
               <label
                 htmlFor="hasarDepozitosu"
@@ -561,7 +443,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Hasar Depozitosu (TL)
               </label>
-
               <input
                 id="hasarDepozitosu"
                 type="number"
@@ -570,10 +451,8 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("hasarDepozitosu", { valueAsNumber: true })}
                 className={inputClass}
               />
-
               <FieldError error={errors.hasarDepozitosu} />
             </div>
-
             <div>
               <label
                 htmlFor="temizlikUcreti"
@@ -581,7 +460,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Temizlik Ücreti (TL)
               </label>
-
               <input
                 id="temizlikUcreti"
                 type="number"
@@ -590,10 +468,8 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("temizlikUcreti", { valueAsNumber: true })}
                 className={inputClass}
               />
-
               <FieldError error={errors.temizlikUcreti} />
             </div>
-
             <div>
               <label
                 htmlFor="minimumKonaklamaTemizlik"
@@ -601,7 +477,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Temizlik Ücreti Gece Sınırı
               </label>
-
               <input
                 id="minimumKonaklamaTemizlik"
                 type="number"
@@ -613,25 +488,50 @@ export default function emlakForm({ emlakId = null }) {
                 })}
                 className={inputClass}
               />
-
               <p className="mt-1.5 text-xs text-slate-500">
                 Bu gece sayısının altındaki konaklamalarda temizlik ücreti
                 alınır. 0 girilirse uygulanmaz.
               </p>
-
               <FieldError error={errors.minimumKonaklamaTemizlik} />
             </div>
+            {/* ACENTE KOMİSYON ORANI */}
+            <div>
+              <label
+                htmlFor="komisyonOrani"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Acente Komisyon Oranı (%)
+              </label>
+              <div className="relative">
+                <input
+                  id="komisyonOrani"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="Örn: 15"
+                  {...register("komisyonOrani", { valueAsNumber: true })}
+                  className={`${inputClass} pr-12`}
+                />
+                <Percent
+                  size={15}
+                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+              </div>
+              <p className="mt-1.5 text-xs leading-5 text-slate-500">
+                Yeni rezervasyonlarda komisyon tutarı bu oranla hesaplanır.
+                Mevcut rezervasyonlar etkilenmez.
+              </p>
+              <FieldError error={errors.komisyonOrani} />
+            </div>
           </div>
-
           <p className="mt-4 text-xs leading-5 text-slate-500">
             Hasar depozitosu iade edilebilir teminat olarak
             değerlendirilmelidir. Temizlik ücretinin rezervasyon toplamına
             eklenmesi ayrıca backend rezervasyon kurallarına bağlanmalıdır.
           </p>
         </FormSection>
-
         {/* ÖZELLİKLER */}
-
         <FormSection
           icon={ListChecks}
           title="Emlak Özellikleri"
@@ -644,24 +544,19 @@ export default function emlakForm({ emlakId = null }) {
             onSelectedChange={(ids) =>
               setValue("ozellikIds", ids, {
                 shouldValidate: true,
-
                 shouldDirty: true,
               })
             }
             onFeaturedChange={(ids) =>
               setValue("oneCikanOzellikIds", ids, {
                 shouldValidate: true,
-
                 shouldDirty: true,
               })
             }
           />
-
           <FieldError error={errors.oneCikanOzellikIds} />
         </FormSection>
-
         {/* HAVUZ */}
-
         <FormSection
           icon={Waves}
           title="Havuz Bilgileri"
@@ -669,9 +564,7 @@ export default function emlakForm({ emlakId = null }) {
         >
           <HavuzBilgileri />
         </FormSection>
-
         {/* KONUM */}
-
         <FormSection
           icon={MapPin}
           title="Konum"
@@ -685,7 +578,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Enlem (Latitude)
               </label>
-
               <input
                 id="latitude"
                 type="number"
@@ -694,10 +586,8 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("latitude")}
                 className={inputClass}
               />
-
               <FieldError error={errors.latitude} />
             </div>
-
             <div>
               <label
                 htmlFor="longitude"
@@ -705,7 +595,6 @@ export default function emlakForm({ emlakId = null }) {
               >
                 Boylam (Longitude)
               </label>
-
               <input
                 id="longitude"
                 type="number"
@@ -714,19 +603,15 @@ export default function emlakForm({ emlakId = null }) {
                 {...register("longitude")}
                 className={inputClass}
               />
-
               <FieldError error={errors.longitude} />
             </div>
           </div>
-
           <p className="mt-4 text-xs leading-5 text-slate-500">
             Koordinatları Google Maps üzerinden alabilirsiniz. İki alanı da boş
             bırakabilirsiniz.
           </p>
         </FormSection>
-
         {/* FORM ACTIONS */}
-
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:px-6">
           <button
             type="button"
@@ -737,7 +622,6 @@ export default function emlakForm({ emlakId = null }) {
             <ArrowLeft size={18} />
             Vazgeç
           </button>
-
           {submitError && (
             <div
               role="alert"
@@ -746,7 +630,6 @@ export default function emlakForm({ emlakId = null }) {
               {submitError}
             </div>
           )}
-
           <button
             type="submit"
             disabled={methods.formState.isSubmitting}
@@ -755,7 +638,6 @@ export default function emlakForm({ emlakId = null }) {
             {methods.formState.isSubmitting ? (
               <Loader2 size={18} className="animate-spin" />
             ) : null}
-
             {methods.formState.isSubmitting
               ? "Kaydediliyor..."
               : isEditMode

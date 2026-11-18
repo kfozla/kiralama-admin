@@ -6,10 +6,10 @@ import {
   Info,
   Clock3,
   Wallet,
-  CarFront,
   BadgeCheck,
   Eye,
   EyeOff,
+  Percent,
 } from "lucide-react";
 
 import {
@@ -54,6 +54,7 @@ function DetailField({ label, value }) {
 
 function formatTime(value) {
   if (!value) return "Belirtilmemiş";
+
   return String(value).slice(0, 5);
 }
 
@@ -72,6 +73,25 @@ function formatMoney(value) {
     style: "currency",
     currency: "TRY",
   }).format(amount);
+}
+
+// Komisyon oranını yüzde formatında gösterir.
+// Örn: 20 -> %20
+// Örn: 12.5 -> %12,5
+function formatPercent(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Belirtilmemiş";
+  }
+
+  const oran = Number(value);
+
+  if (!Number.isFinite(oran)) {
+    return "Belirtilmemiş";
+  }
+
+  return `%${new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 2,
+  }).format(oran)}`;
 }
 
 export default function EmlakOverview({ emlak, bolgeAdi, sahip }) {
@@ -204,6 +224,27 @@ export default function EmlakOverview({ emlak, bolgeAdi, sahip }) {
           koşullara göre iade edilebilen güvence tutarıdır. Temizlik ücreti,
           belirlenen gece sınırının altındaki konaklamalarda uygulanır.
         </p>
+      </Section>
+
+      {/* FİNANSAL BİLGİLER - YENİ */}
+      <Section icon={Percent} title="Finansal Bilgiler">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <DetailField
+            label="Acente Komisyon Oranı"
+            value={formatPercent(emlak.komisyonOrani)}
+          />
+        </div>
+
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+          <Info size={17} className="mt-0.5 shrink-0 text-blue-600" />
+
+          <p className="text-xs leading-5 text-blue-700">
+            Bu komisyon oranı, yeni rezervasyonların oluşturulması sırasında
+            konaklama bedeli üzerinden acentenin komisyon tutarını hesaplamak
+            için kullanılır. Komisyon oranının değiştirilmesi daha önce
+            oluşturulmuş rezervasyonların komisyon tutarlarını etkilemez.
+          </p>
+        </div>
       </Section>
 
       {/* BÖLGE */}
